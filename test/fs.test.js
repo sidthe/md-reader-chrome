@@ -43,6 +43,31 @@ function mockDir(name, entries) {
 }
 const mockFile = (name) => ({ kind: 'file', name });
 
+test('walk: onEntry fires per entry and async callbacks are awaited', async () => {
+  const root = mockDir('repo', [
+    mockFile('a.md'),
+    mockDir('docs', [mockFile('b.md'), mockFile('c.txt')]),
+    mockDir('.git', [mockFile('x.md')]),
+  ]);
+  const seen = [];
+  let pendingAwaited = true;
+  await walk(root, '', (p) => {
+    seen.push(p);
+    // return a promise that flips a flag; walk must await it before continuing
+    pendingAwaited = false;
+    return new Promise((r) =>
+      setTimeout(() => {
+        pendingAwaited = true;
+        r();
+      })
+    );
+  });
+  assert.ok(pendingAwaited, 'walk continued without awaiting onEntry');
+  // every direct entry visited, including non-md and skipped dirs (progress
+  // covers real I/O), but .git contents are never entered
+  assert.deepEqual(seen.sort(), ['.git', 'a.md', 'docs', 'docs/b.md', 'docs/c.txt']);
+});
+
 test('walk: skips .git/node_modules, prunes md-less dirs, sorts', async () => {
   const root = mockDir('repo', [
     mockFile('zebra.md'),

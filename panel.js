@@ -1,4 +1,4 @@
-import { idbGet, idbSet } from './lib/idb.js';
+import { idbGet } from './lib/idb.js';
 import { createRealSource, createMockSource } from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
@@ -279,6 +279,8 @@ els.tabBtn.addEventListener('click', () => {
 });
 
 els.refreshBtn.addEventListener('click', async () => {
+  els.refreshBtn.disabled = true;
+  els.refreshBtn.classList.add('spinning');
   try {
     tree = await source.tree();
     renderTree();
@@ -290,6 +292,9 @@ els.refreshBtn.addEventListener('click', async () => {
     }
   } catch (err) {
     onFolderGone(err);
+  } finally {
+    els.refreshBtn.classList.remove('spinning');
+    els.refreshBtn.disabled = document.body.dataset.state !== 'ready';
   }
 });
 
@@ -299,19 +304,23 @@ els.folderBtn.addEventListener('click', () => {
 
 /* ---------- folder lifecycle ---------- */
 
-async function pickFolder() {
-  let handle;
-  try {
-    handle = await window.showDirectoryPicker({ id: 'md-reader', mode: 'read' });
-  } catch (err) {
-    if (err?.name === 'AbortError') return;
-    throw err;
-  }
-  await idbSet('root', handle);
+// Picking runs in a full tab (reader.html?pick=1): side-panel pickers can
+// return AbortError even when a directory WAS selected (crbug 40240444),
+// which is indistinguishable from a cancel. The pick tab broadcasts back.
+function pickFolder() {
+  const url = new URL('reader.html', location.href);
+  url.searchParams.set('pick', '1');
+  if (typeof chrome !== 'undefined' && chrome.tabs) chrome.tabs.create({ url: url.toString() });
+  else window.open(url.toString(), 'md-reader'); // http harness fallback
+}
+
+new BroadcastChannel('md-reader').addEventListener('message', (e) => {
+  if (e.data?.type !== 'folder-picked') return;
   backStack.length = 0;
   fwdStack.length = 0;
-  await connect(handle);
-}
+  activePath = null;
+  boot(); // re-reads the stored handle; reuses permission/edge-state machinery
+});
 
 function onFolderGone(err) {
   console.warn('folder unavailable', err);
@@ -331,8 +340,27 @@ async function connect(handle) {
 
 async function loadFolder() {
   expanded.set = loadExpanded();
+  // Scanning is disk-speed-bound (one IPC per entry; cloud-synced folders can
+  // stall on placeholders) — show live progress instead of a frozen panel.
+  showEdge(
+    `<h2>Scanning “${source.name}”…</h2>
+     <p><span class="scan-count">0</span> entries · <span class="scan-path"></span></p>`
+  );
+  const countEl = els.edge.querySelector('.scan-count');
+  const pathEl = els.edge.querySelector('.scan-path');
+  let scanned = 0;
+  let lastPaint = 0;
   try {
-    tree = await source.tree();
+    tree = await source.tree((entryPath) => {
+      scanned++;
+      const now = Date.now();
+      if (now - lastPaint > 100) {
+        lastPaint = now;
+        countEl.textContent = String(scanned);
+        pathEl.textContent = entryPath.length > 48 ? `…${entryPath.slice(-47)}` : entryPath;
+        return new Promise((r) => setTimeout(r)); // let the panel repaint
+      }
+    });
   } catch (err) {
     onFolderGone(err);
     return;
@@ -425,5 +453,10 @@ async function boot() {
     ]
   );
 }
+
+// Diagnostics: any swallowed async failure would otherwise present as a hang.
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[md-reader] unhandled rejection:', e.reason);
+});
 
 boot();

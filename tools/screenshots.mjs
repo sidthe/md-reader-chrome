@@ -45,6 +45,7 @@ try {
   await shot('reader-light', 'reader.html?mock=1&path=README.md', TAB);
   await shot('reader-dark', 'reader.html?mock=1&path=README.md', TAB, { dark: true });
   await shot('reader-nofile', 'reader.html?mock=1', TAB, { ready: EDGE });
+  await shot('reader-pick', 'reader.html?pick=1', TAB, { ready: EDGE });
 } finally {
   await chrome.close();
   server.close();
