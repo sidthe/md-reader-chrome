@@ -1,6 +1,6 @@
 # 01 — md-reader: GitHub-style local Markdown reader (Chrome extension)
 
-Status: **proposed — awaiting sign-off** · Tier 2 · Combined concept + spec + implementation plan (small feature, one doc).
+Status: **signed off 2026-07-28; implemented** (phases 1–4 built; real-folder side-panel flow pending manual verification — see Test plan) · Tier 2 · Combined concept + spec + implementation plan (small feature, one doc).
 
 ## Problem
 
@@ -73,9 +73,13 @@ No bundler: vendored minified builds in `vendor/` + a `vendor/LICENSES.md` inven
 
 **Security posture:** rendered HTML is sanitized (raw HTML in md stripped to a safe subset); extension page CSP disallows remote script; file content never leaves the machine (contrast: `grip` sends content to GitHub's API).
 
-**Test plan (§5):**
-- Unit (node, vitest — MIT): render pipeline against a fixture set of GFM features (tables, task lists, alerts, code, relative links/images); sanitizer strips `<script>`/event handlers; fs walk skip-list.
-- Real-run (§5.7): load unpacked, pick this repo's folder, screenshot side panel + full tab in light and dark, drive edge states (deny permission, delete folder mid-session), design critique on the screenshots, fix, re-shoot.
+**Test plan (§5)** *(changed from the signed-off draft: vitest/npm devDeps dropped — the npm registry here needs interactive auth, and testing the vendored UMD builds directly is stronger anyway; tooling is zero-dependency CDP on node's built-in WebSocket)*:
+- Unit (`npm test`, node:test): render pipeline against the **vendored builds** via `createRequire` (tables, task lists, all five alerts, code highlighting, heading anchors/slugger, relative links); `fs.js` resolvePath/skip-list/walk. Sanitizer assertions are excluded here — DOMPurify needs a real DOM.
+- Browser (`npm run test:browser`, headless Chrome via `tools/cdp.mjs`): real vendored DOMPurify — strips `<script>`/handlers/`javascript:` hrefs, keeps checkboxes/octicons/heading ids, full README fixture renders.
+- Screenshots (`npm run shots`): panel + reader, light/dark + edge states, from `?mock=1` fixture mode (amber MOCK badge) served over localhost; design-critique loop on the shots.
+- Real-run (§5.7, manual — folder picking can't be automated): load unpacked, pick this repo's folder, restart Chrome → one-click reconnect, deny permission / delete folder mid-session.
+
+**Renderer notes:** heading ids carry GitHub's `user-content-` prefix — GitHub parity, and DOMPurify's DOM-clobbering protection strips bare ids like `title`. Anchor `href`s stay unprefixed; the viewer resolves both.
 
 ## Implementation plan
 

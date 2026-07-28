@@ -11,4 +11,9 @@ All permissive. Versions pinned; re-download from the URLs below to upgrade.
 | hljs-github.min.css / hljs-github-dark.min.css | highlight.js styles | 11.11.1 | BSD-3-Clause | same release |
 | purify.min.js | dompurify | 3.2.6 | Apache-2.0 (dual-licensed MPL-2.0 OR Apache-2.0; used under Apache-2.0) | https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js |
 
-Heading anchor icon: octicon `link` SVG path, inlined in `lib/render.js` — MIT (github/octicons).
+Inlined SVG path data (no library dependency):
+
+- Octicons (`link`, `info`, `light-bulb`, `report`, `alert`, `stop`, `file`, `file-directory-fill`, `chevron-left/right`, `link-external`, `sync`) in `lib/render.js`, `panel.js`, `panel.html`, `reader.html`/`reader.js` — MIT (github/octicons).
+- Markdown mark (extension icon, `tools/icon.html`) — hand-drawn variant; the reference mark is dual-licensed CC0-1.0 / OWFa-1.0 (dcurtis/markdown-mark).
+
+`vendor/package.json` (`{"type":"commonjs"}`) is ours — it lets node tests `require()` these UMD builds directly, so tests run against the exact bytes that ship.

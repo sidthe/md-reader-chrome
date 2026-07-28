@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>md-reader browser tests</title></head>
+<body>
+<script src="../../vendor/markdown-it.min.js"></script>
+<script src="../../vendor/markdown-it-task-lists.min.js"></script>
+<script src="../../vendor/purify.min.js"></script>
+<script src="../../vendor/highlight.min.js"></script>
+<script type="module">
+// Sanitizer + DOM behavior against the real vendored DOMPurify in real
+// Chrome — the part test/render.test.js cannot cover in node.
+import { createRenderer } from '../../lib/render.js';
+
+const tests = [];
+const t = (name, fn) => tests.push({ name, fn });
+function ok(cond, msg) {
+  if (!cond) throw new Error(msg);
+}
+
+const { render } = createRenderer({
+  markdownit: globalThis.markdownit,
+  taskLists: globalThis.markdownitTaskLists,
+  hljs: globalThis.hljs,
+  DOMPurify: globalThis.DOMPurify,
+});
+
+t('strips <script>', () => {
+  const html = render('before\n\n<script>alert(1)<\/script>\n\nafter');
+  ok(!html.includes('<script'), `script survived: ${html}`);
+  ok(html.includes('before') && html.includes('after'), 'content lost');
+});
+
+t('strips event handlers from raw HTML', () => {
+  const html = render('<img src="x" onerror="alert(1)">');
+  ok(!html.includes('onerror'), `onerror survived: ${html}`);
+});
+
+t('no javascript: hrefs reach the DOM', () => {
+  // markdown-it's validateLink refuses the link; raw HTML ones fall to DOMPurify.
+  const html = render('[x](javascript:alert(1))\n\n<a href="javascript:alert(2)">y</a>');
+  ok(!/href\s*=\s*["']?javascript:/i.test(html), `javascript: href survived: ${html}`);
+});
+
+t('keeps safe raw HTML (b, kbd)', () => {
+  const html = render('<b>bold</b> and <kbd>Ctrl</kbd>');
+  ok(html.includes('<b>bold</b>'), 'lost <b>');
+  ok(html.includes('<kbd>Ctrl</kbd>'), 'lost <kbd>');
+});
+
+t('task-list checkboxes survive sanitize', () => {
+  const html = render('- [x] done\n- [ ] todo');
+  ok(/<input[^>]*type="checkbox"/.test(html), `no checkbox: ${html}`);
+  ok(/checked/.test(html), 'lost checked');
+  ok(/disabled/.test(html), 'lost disabled');
+});
+
+t('octicon svgs survive sanitize (anchors + alerts)', () => {
+  const html = render('# Title\n\n> [!NOTE]\n> body');
+  ok(html.includes('octicon-link'), 'lost heading anchor svg');
+  ok(html.includes('markdown-alert-note'), 'lost alert class');
+  ok(/<svg[^>]*octicon-note/.test(html), 'lost alert svg');
+  ok(/<h1 id="user-content-title">/.test(html), 'lost heading id');
+});
+
+t('full README fixture renders into DOM', async () => {
+  const md = await (await fetch('../../fixtures/mock/README.md')).text();
+  const el = document.createElement('div');
+  el.innerHTML = render(md);
+  ok(el.querySelectorAll('.markdown-alert').length === 5, 'expected 5 alerts');
+  ok(el.querySelector('table'), 'no table');
+  ok(el.querySelectorAll('input[type=checkbox]').length === 3, 'expected 3 checkboxes');
+  ok(!el.querySelector('script'), 'script leaked');
+});
+
+(async () => {
+  const results = [];
+  for (const { name, fn } of tests) {
+    try {
+      await fn();
+      results.push({ name, ok: true });
+    } catch (e) {
+      results.push({ name, ok: false, err: String(e) });
+    }
+  }
+  globalThis.__results = { done: true, results };
+})();
+</script>
+</body>
+</html>

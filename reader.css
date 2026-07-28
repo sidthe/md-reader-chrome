@@ -1,0 +1,15 @@
+/* Full-tab reader: wider measure, roomier padding than the side panel. */
+.reader-wrap { padding: 32px 24px; }
+.markdown-body {
+  max-width: 900px;
+  font-size: 16px;
+}
+.crumb {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crumb .sep { color: var(--fg-muted); font-weight: 400; margin: 0 4px; }
+.topbar { padding: 8px 16px; }
+.statusbar { padding: 5px 16px; }
