@@ -1,4 +1,5 @@
 import { idbGet, idbSet } from './lib/idb.js';
+import { makeDirectoryDropTarget } from './lib/drop.js';
 import { createRealSource, createMockSource } from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
@@ -111,29 +112,12 @@ async function pickFlow() {
     showEdge(
       `<svg class="blank-icon" viewBox="0 0 16 16" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2A1.75 1.75 0 0 0 5 1H1.75Z"/></svg>
        <h2>Choose a folder for md-reader</h2>
-       <p>Its Markdown files will be listed in the side panel. Read directly from disk — nothing leaves this machine.</p>`,
+       <p>Its Markdown files will be listed in the side panel. Read directly from disk — nothing leaves this machine.</p>
+       <p><strong>Drag a folder anywhere onto this page</strong> — or use the picker:</p>`,
       [{ label: 'Choose folder…', onClick: doPick }]
     );
 
-  async function doPick() {
-    let handle;
-    try {
-      handle = await window.showDirectoryPicker({ id: 'md-reader', mode: 'read' });
-    } catch (err) {
-      if (err?.name === 'AbortError') {
-        showEdge(
-          `<h2>No folder selected</h2>
-           <p>The picker closed without granting access. If you did select a folder, Chrome refused it — check for a permission bubble near the address bar, then try again.</p>`,
-          [{ label: 'Try again', onClick: doPick }]
-        );
-      } else {
-        showEdge(
-          `<h2>Folder picker failed</h2><p>${err?.name || 'Error'}: ${err?.message || err}</p>`,
-          [{ label: 'Try again', onClick: doPick }]
-        );
-      }
-      return;
-    }
+  async function accept(handle) {
     await idbSet('root', handle);
     new BroadcastChannel('md-reader').postMessage({ type: 'folder-picked', name: handle.name });
     showEdge(`<h2>Connected to “${handle.name}”</h2><p>The side panel is loading it. This tab will close.</p>`);
@@ -146,6 +130,36 @@ async function pickFlow() {
       }
     }, 1200);
   }
+
+  async function doPick() {
+    let handle;
+    try {
+      handle = await window.showDirectoryPicker({ id: 'md-reader', mode: 'read' });
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        showEdge(
+          `<h2>No folder selected</h2>
+           <p>The picker closed without granting access. If you did select a folder, Chrome refused it — check for a permission bubble near the address bar. You can also drag the folder onto this page instead.</p>`,
+          [{ label: 'Try again', onClick: doPick }]
+        );
+      } else {
+        showEdge(
+          `<h2>Folder picker failed</h2><p>${err?.name || 'Error'}: ${err?.message || err}</p><p>You can also drag the folder onto this page instead.</p>`,
+          [{ label: 'Try again', onClick: doPick }]
+        );
+      }
+      return;
+    }
+    await accept(handle);
+  }
+
+  makeDirectoryDropTarget(document.body, {
+    onDirectory: accept,
+    onError: (msg) =>
+      showEdge(`<h2>That drop didn’t work</h2><p>${msg}</p>`, [
+        { label: 'Choose folder…', onClick: doPick },
+      ]),
+  });
 
   start();
 }

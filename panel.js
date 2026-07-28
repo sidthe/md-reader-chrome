@@ -1,4 +1,5 @@
-import { idbGet } from './lib/idb.js';
+import { idbGet, idbSet } from './lib/idb.js';
+import { makeDirectoryDropTarget } from './lib/drop.js';
 import { createRealSource, createMockSource } from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
@@ -314,6 +315,25 @@ function pickFolder() {
   else window.open(url.toString(), 'md-reader'); // http harness fallback
 }
 
+// Dropping a folder from Finder/Explorer anywhere on the panel connects it —
+// no picker dialog (and no enterprise scan hook) involved at all.
+makeDirectoryDropTarget(document.body, {
+  onDirectory: async (handle) => {
+    if (IS_MOCK) return;
+    await idbSet('root', handle);
+    backStack.length = 0;
+    fwdStack.length = 0;
+    activePath = null;
+    await connect(handle);
+  },
+  onError: (msg) => {
+    if (IS_MOCK) return;
+    showEdge(`<h2>That drop didn’t work</h2><p>${msg}</p>`, [
+      { label: 'Choose folder…', onClick: pickFolder },
+    ]);
+  },
+});
+
 new BroadcastChannel('md-reader').addEventListener('message', (e) => {
   if (e.data?.type !== 'folder-picked') return;
   backStack.length = 0;
@@ -425,7 +445,8 @@ async function boot() {
     showEdge(
       `<svg class="blank-icon" viewBox="0 0 208 128" width="48" height="30" aria-hidden="true"><rect x="4" y="4" width="200" height="120" rx="12" fill="none" stroke="currentColor" stroke-width="10"/><path fill="currentColor" d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39Z"/><path fill="currentColor" d="m155 98-27-30h18V30h18v38h18Z"/></svg>
        <h2>md-reader</h2>
-       <p>Browse a local folder’s Markdown files, rendered GitHub-style. Files are read directly from disk — nothing leaves this machine.</p>`,
+       <p>Browse a local folder’s Markdown files, rendered GitHub-style. Files are read directly from disk — nothing leaves this machine.</p>
+       <p><strong>Drop a folder onto this panel</strong> — or use the picker:</p>`,
       [{ label: 'Choose folder…', onClick: pickFolder }]
     );
     return;
