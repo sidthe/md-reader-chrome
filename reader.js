@@ -1,4 +1,4 @@
-import { idbGet } from './lib/idb.js';
+import { idbGet, idbSet } from './lib/idb.js';
 import { createRealSource, createMockSource } from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
@@ -103,8 +103,56 @@ const NO_FILE_HTML = `<svg class="blank-icon" viewBox="0 0 16 16" width="28" hei
   <h2>No file specified</h2>
   <p>Open the md-reader side panel (click the toolbar icon) and pick a file — the ⧉ button reopens it here.</p>`;
 
+// Folder picking happens here, in a full tab — showDirectoryPicker from side
+// panels/popups can return AbortError even when a directory was selected
+// (crbug 40240444, WICG/file-system-access#314). Tab context is reliable.
+async function pickFlow() {
+  const start = () =>
+    showEdge(
+      `<svg class="blank-icon" viewBox="0 0 16 16" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2A1.75 1.75 0 0 0 5 1H1.75Z"/></svg>
+       <h2>Choose a folder for md-reader</h2>
+       <p>Its Markdown files will be listed in the side panel. Read directly from disk — nothing leaves this machine.</p>`,
+      [{ label: 'Choose folder…', onClick: doPick }]
+    );
+
+  async function doPick() {
+    let handle;
+    try {
+      handle = await window.showDirectoryPicker({ id: 'md-reader', mode: 'read' });
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        showEdge(
+          `<h2>No folder selected</h2>
+           <p>The picker closed without granting access. If you did select a folder, Chrome refused it — check for a permission bubble near the address bar, then try again.</p>`,
+          [{ label: 'Try again', onClick: doPick }]
+        );
+      } else {
+        showEdge(
+          `<h2>Folder picker failed</h2><p>${err?.name || 'Error'}: ${err?.message || err}</p>`,
+          [{ label: 'Try again', onClick: doPick }]
+        );
+      }
+      return;
+    }
+    await idbSet('root', handle);
+    new BroadcastChannel('md-reader').postMessage({ type: 'folder-picked', name: handle.name });
+    showEdge(`<h2>Connected to “${handle.name}”</h2><p>The side panel is loading it. This tab will close.</p>`);
+    setTimeout(async () => {
+      try {
+        const tab = await chrome.tabs.getCurrent();
+        if (tab?.id != null) chrome.tabs.remove(tab.id);
+      } catch {
+        /* not a tab or no chrome.tabs — leave the confirmation on screen */
+      }
+    }, 1200);
+  }
+
+  start();
+}
+
 async function boot() {
   els.crumb.textContent = 'md-reader';
+  if (params.get('pick') === '1') return pickFlow();
   const path = params.get('path');
   if (IS_MOCK) {
     source = await createMockSource();

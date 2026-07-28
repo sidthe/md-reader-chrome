@@ -13,7 +13,8 @@ A Manifest V3 extension using `chrome.sidePanel` (file browser + reader) and the
 ## Research log
 
 - ✅ VERIFIED (2026-07-28) `chrome.sidePanel` is stable (Chrome 114+); side panel pages are extension pages with full API access. Source: [chrome.sidePanel docs](https://developer.chrome.com/docs/extensions/reference/api/sidePanel).
-- 📚 SOURCED `showDirectoryPicker()` works from extension pages/side panels; it is unreliable from **popups** (dialog focus steals close the popup). Sources: [WICG/file-system-access#314](https://github.com/WICG/file-system-access/issues/314), [crbug 40240444](https://issues.chromium.org/issues/40240444). → Folder picking happens in the side panel, never a popup.
+- ❌ SUPERSEDED (2026-07-29) ~~`showDirectoryPicker()` works from extension pages/side panels; unreliable only from popups~~ — user hit the extension-context picker bug from the side panel: dialog opens, a directory is selected, Chrome still returns `AbortError` (indistinguishable from a cancel). Sources: [WICG/file-system-access#314](https://github.com/WICG/file-system-access/issues/314), [crbug 40240444](https://issues.chromium.org/issues/40240444). Superseded by:
+- 📚 SOURCED (2026-07-29) The reliable picker context for extensions is a **full tab**. → All folder picking runs in `reader.html?pick=1`; the pick tab stores the handle in IndexedDB, notifies the panel over `BroadcastChannel('md-reader')`, and closes itself.
 - 📚 SOURCED `FileSystemDirectoryHandle` is structured-cloneable → persist in **IndexedDB** (not `chrome.storage`). Restored handles report permission `'prompt'`; `requestPermission()` needs a user gesture. Chrome's persistent-permissions prompt offers "Allow on every visit" → zero re-prompts thereafter. Source: [Persistent permissions blog](https://developer.chrome.com/blog/persistent-permissions-for-the-file-system-access-api). → UX: a one-click "Reconnect <folder>" button when state is `'prompt'`.
 - 📚 SOURCED Clearing browsing data wipes stored handles → graceful "pick a folder" empty state, never an error.
 - 🤔 ASSUMPTION GitHub-parity rendering needs: GFM tables, task lists, strikethrough, autolinks, fenced code + syntax highlight, `> [!NOTE]`-style alerts, anchor links on headings. Footnotes/mermaid/math deferred to v2.
@@ -58,8 +59,8 @@ Edge states (first-class): no folder picked (CTA), permission `'prompt'` (Reconn
 **Manifest (MV3):** `side_panel.default_path`, `action` (click → open panel), permissions: `sidePanel` only. No host permissions, no content scripts, no remote code. All libs vendored.
 
 **Components:**
-- `panel.html/js` — tree + reader, folder lifecycle (pick → store handle in IndexedDB via ~30-line helper → restore → query/requestPermission).
-- `reader.html/js` — full-tab reader, `?path=` param, same modules.
+- `panel.html/js` — tree + reader, folder lifecycle (restore → query/requestPermission; picking delegated to the pick tab, result received via BroadcastChannel).
+- `reader.html/js` — full-tab reader, `?path=` param, same modules; also the folder-pick page (`?pick=1`, see research log).
 - `lib/fs.js` — directory walk (`.md`, `.markdown`; skips `.git`, `node_modules`), file read, mtime.
 - `lib/render.js` — markdown-it pipeline → DOMPurify sanitize → inject; heading anchors; link/image rewriting.
 

@@ -1,4 +1,4 @@
-import { idbGet, idbSet } from './lib/idb.js';
+import { idbGet } from './lib/idb.js';
 import { createRealSource, createMockSource } from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
@@ -304,27 +304,23 @@ els.folderBtn.addEventListener('click', () => {
 
 /* ---------- folder lifecycle ---------- */
 
-async function pickFolder() {
-  let handle;
-  try {
-    handle = await window.showDirectoryPicker({ id: 'md-reader', mode: 'read' });
-  } catch (err) {
-    if (err?.name === 'AbortError') return;
-    // Never fail silently — a swallowed picker error looks like a hang.
-    showEdge(
-      `<h2>Folder picker failed</h2>
-       <p>${err?.name || 'Error'}: ${err?.message || err}</p>
-       <p>If no dialog appeared, check whether a picker window opened behind Chrome.</p>`,
-      [{ label: 'Try again', onClick: pickFolder }]
-    );
-    return;
-  }
-  await idbSet('root', handle);
+// Picking runs in a full tab (reader.html?pick=1): side-panel pickers can
+// return AbortError even when a directory WAS selected (crbug 40240444),
+// which is indistinguishable from a cancel. The pick tab broadcasts back.
+function pickFolder() {
+  const url = new URL('reader.html', location.href);
+  url.searchParams.set('pick', '1');
+  if (typeof chrome !== 'undefined' && chrome.tabs) chrome.tabs.create({ url: url.toString() });
+  else window.open(url.toString(), 'md-reader'); // http harness fallback
+}
+
+new BroadcastChannel('md-reader').addEventListener('message', (e) => {
+  if (e.data?.type !== 'folder-picked') return;
   backStack.length = 0;
   fwdStack.length = 0;
   activePath = null;
-  await connect(handle);
-}
+  boot(); // re-reads the stored handle; reuses permission/edge-state machinery
+});
 
 function onFolderGone(err) {
   console.warn('folder unavailable', err);
