@@ -1,6 +1,6 @@
 # 01 — md-reader: GitHub-style local Markdown reader (Chrome extension)
 
-Status: **signed off 2026-07-28; implemented** (phases 1–4 built; real-folder side-panel flow pending manual verification — see Test plan) · Tier 2 · Combined concept + spec + implementation plan (small feature, one doc).
+Status: **implemented** (v1 merged 2026-07-28) · Combined concept + spec + implementation plan (small feature, one doc).
 
 ## Problem
 
@@ -18,7 +18,7 @@ A Manifest V3 extension using `chrome.sidePanel` (file browser + reader) and the
 - 📚 SOURCED Clearing browsing data wipes stored handles → graceful "pick a folder" empty state, never an error.
 - 🤔 ASSUMPTION GitHub-parity rendering needs: GFM tables, task lists, strikethrough, autolinks, fenced code + syntax highlight, `> [!NOTE]`-style alerts, anchor links on headings. Footnotes/mermaid/math deferred to v2.
 
-## Brand (§3.5)
+## Brand
 
 Basis: **match a reference product — GitHub** (user-specified). `github-markdown-css` for the document body (auto light/dark via `prefers-color-scheme`); chrome around it uses the same GitHub palette + system font stack. Signature moment: on file open, the document fades/slides in and the active tree row carries a GitHub-blue accent bar. `prefers-reduced-motion` honored.
 
@@ -40,7 +40,7 @@ Wireframe proposal — not a real screenshot
 │ ```code```                    │
 │                               │
 ├───────────────────────────────┤
-│ README.md · 4.1 KB · read 2s ago  │ freshness line (§0.1)
+│ README.md · 4.1 KB · read 2s ago  │ freshness line              
 └───────────────────────────────┘
 ```
 
@@ -63,7 +63,7 @@ Edge states (first-class): no folder picked (CTA), permission `'prompt'` (Reconn
 - `lib/fs.js` — directory walk (`.md`, `.markdown`; skips `.git`, `node_modules`), file read, mtime.
 - `lib/render.js` — markdown-it pipeline → DOMPurify sanitize → inject; heading anchors; link/image rewriting.
 
-**Dependencies (licenses recorded per §6.5 — all permissive):**
+**Dependencies (all permissive; inventory in `vendor/LICENSES.md`):**
 
 | lib | purpose | license |
 |---|---|---|
@@ -76,11 +76,11 @@ No bundler: vendored minified builds in `vendor/` + a `vendor/LICENSES.md` inven
 
 **Security posture:** rendered HTML is sanitized (raw HTML in md stripped to a safe subset); extension page CSP disallows remote script; file content never leaves the machine (contrast: `grip` sends content to GitHub's API).
 
-**Test plan (§5)** *(changed from the signed-off draft: vitest/npm devDeps dropped — the npm registry here needs interactive auth, and testing the vendored UMD builds directly is stronger anyway; tooling is zero-dependency CDP on node's built-in WebSocket)*:
+**Test plan** *(changed from the signed-off draft: vitest/npm devDeps dropped — the npm registry here needs interactive auth, and testing the vendored UMD builds directly is stronger anyway; tooling is zero-dependency CDP on node's built-in WebSocket)*:
 - Unit (`npm test`, node:test): render pipeline against the **vendored builds** via `createRequire` (tables, task lists, all five alerts, code highlighting, heading anchors/slugger, relative links); `fs.js` resolvePath/skip-list/walk. Sanitizer assertions are excluded here — DOMPurify needs a real DOM.
 - Browser (`npm run test:browser`, headless Chrome via `tools/cdp.mjs`): real vendored DOMPurify — strips `<script>`/handlers/`javascript:` hrefs, keeps checkboxes/octicons/heading ids, full README fixture renders.
 - Screenshots (`npm run shots`): panel + reader, light/dark + edge states, from `?mock=1` fixture mode (amber MOCK badge) served over localhost; design-critique loop on the shots.
-- Real-run (§5.7, manual — folder picking can't be automated): load unpacked, pick this repo's folder, restart Chrome → one-click reconnect, deny permission / delete folder mid-session.
+- Real-run (manual — folder picking can't be automated): load unpacked, pick this repo's folder, restart Chrome → one-click reconnect, deny permission / delete folder mid-session.
 
 **Renderer notes:** heading ids carry GitHub's `user-content-` prefix — GitHub parity, and DOMPurify's DOM-clobbering protection strips bare ids like `title`. Anchor `href`s stay unprefixed; the viewer resolves both.
 
@@ -89,6 +89,6 @@ No bundler: vendored minified builds in `vendor/` + a `vendor/LICENSES.md` inven
 1. **Skeleton + folder lifecycle** — manifest, side panel opens, pick/persist/reconnect folder, tree lists `.md` files. ✓ = restart Chrome, one click restores the tree.
 2. **Renderer** — markdown-it pipeline + sanitize + github-markdown-css, unit tests green. ✓ = fixture file renders visually to par with github.com side-by-side screenshot.
 3. **Reader UX** — relative link/image navigation, history, full-tab reader, freshness line, edge states. ✓ = each edge state screenshotted.
-4. **Polish + §5.6/§5.7 gate** — motion, dark mode, design critique loop, drift audit vs this doc.
+4. **Polish + review gate** — motion, dark mode, design critique loop, drift audit vs this doc.
 
 Deferred (tracked here, not built): mermaid, math, footnotes, multi-folder workspaces, search, file watching (FS Access API has no change events — refresh is manual in v1).
