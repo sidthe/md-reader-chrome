@@ -121,7 +121,7 @@ function setFolderName(name) {
   els.folderBtn.hidden = false;
   els.folderBtn.classList.remove('wordmark');
   els.folderBtn.textContent = name;
-  els.folderBtn.title = `${name} — click to switch folder`;
+  els.folderBtn.title = `${name} — click to switch folder, or drop a folder anywhere on this panel`;
 }
 
 function updateNavButtons() {
