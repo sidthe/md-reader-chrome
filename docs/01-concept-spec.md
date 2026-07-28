@@ -51,7 +51,7 @@ Layout — two read modes, toggled by a header button, persisted (changed 2026-0
 
 Interactions: click file → render; relative `.md` links navigate within the reader (history back/forward); relative images resolved through the directory handle to blob URLs; external links open in a new tab. Refresh re-reads from disk; the freshness line always shows file mtime + when it was read.
 
-Edge states (first-class): no folder picked (CTA), permission `'prompt'` (Reconnect button), folder deleted/moved (explain + re-pick), empty folder (no `.md` found), file >1 MB (confirm before render), binary/non-md file (not listed).
+Edge states (first-class): no folder picked (CTA), permission `'prompt'` (Reconnect button), folder deleted/moved (explain + re-pick), empty folder (no `.md` found), file >1 MB (confirm before render), binary/non-md file (not listed), folder scan in progress (live entry count + current path — scans are disk-speed-bound and cloud-synced folders can stall), folder-picker failure (error shown with retry, never silent).
 
 ## Spec
 

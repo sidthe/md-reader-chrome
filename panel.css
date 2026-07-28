@@ -256,6 +256,12 @@ body[data-state="edge"] .topbar .icon-btn { display: none; }
   text-overflow: ellipsis;
 }
 
+.icon-btn.spinning svg { animation: btn-spin 900ms linear infinite; }
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn.spinning svg { animation: none; opacity: 0.5; }
+}
+
 /* ---- read mode: tab = tree-only panel, docs open in a full tab ---- */
 body.mode-tab .reader-wrap,
 body.mode-tab .statusbar { display: none; }

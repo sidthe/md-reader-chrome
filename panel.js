@@ -279,6 +279,8 @@ els.tabBtn.addEventListener('click', () => {
 });
 
 els.refreshBtn.addEventListener('click', async () => {
+  els.refreshBtn.disabled = true;
+  els.refreshBtn.classList.add('spinning');
   try {
     tree = await source.tree();
     renderTree();
@@ -290,6 +292,9 @@ els.refreshBtn.addEventListener('click', async () => {
     }
   } catch (err) {
     onFolderGone(err);
+  } finally {
+    els.refreshBtn.classList.remove('spinning');
+    els.refreshBtn.disabled = document.body.dataset.state !== 'ready';
   }
 });
 
@@ -305,11 +310,19 @@ async function pickFolder() {
     handle = await window.showDirectoryPicker({ id: 'md-reader', mode: 'read' });
   } catch (err) {
     if (err?.name === 'AbortError') return;
-    throw err;
+    // Never fail silently — a swallowed picker error looks like a hang.
+    showEdge(
+      `<h2>Folder picker failed</h2>
+       <p>${err?.name || 'Error'}: ${err?.message || err}</p>
+       <p>If no dialog appeared, check whether a picker window opened behind Chrome.</p>`,
+      [{ label: 'Try again', onClick: pickFolder }]
+    );
+    return;
   }
   await idbSet('root', handle);
   backStack.length = 0;
   fwdStack.length = 0;
+  activePath = null;
   await connect(handle);
 }
 
@@ -331,8 +344,27 @@ async function connect(handle) {
 
 async function loadFolder() {
   expanded.set = loadExpanded();
+  // Scanning is disk-speed-bound (one IPC per entry; cloud-synced folders can
+  // stall on placeholders) — show live progress instead of a frozen panel.
+  showEdge(
+    `<h2>Scanning “${source.name}”…</h2>
+     <p><span class="scan-count">0</span> entries · <span class="scan-path"></span></p>`
+  );
+  const countEl = els.edge.querySelector('.scan-count');
+  const pathEl = els.edge.querySelector('.scan-path');
+  let scanned = 0;
+  let lastPaint = 0;
   try {
-    tree = await source.tree();
+    tree = await source.tree((entryPath) => {
+      scanned++;
+      const now = Date.now();
+      if (now - lastPaint > 100) {
+        lastPaint = now;
+        countEl.textContent = String(scanned);
+        pathEl.textContent = entryPath.length > 48 ? `…${entryPath.slice(-47)}` : entryPath;
+        return new Promise((r) => setTimeout(r)); // let the panel repaint
+      }
+    });
   } catch (err) {
     onFolderGone(err);
     return;
@@ -425,5 +457,10 @@ async function boot() {
     ]
   );
 }
+
+// Diagnostics: any swallowed async failure would otherwise present as a hang.
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[md-reader] unhandled rejection:', e.reason);
+});
 
 boot();
