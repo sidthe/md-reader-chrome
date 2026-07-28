@@ -8,6 +8,8 @@ Design: `docs/01-concept-spec.md`.
 
 `chrome://extensions` → Developer mode → Load unpacked → this folder. Click the toolbar icon to open the side panel, then Choose folder.
 
+Clicking a file opens it in a full tab (the panel is the navigator). The layout toggle in the panel header switches to reading inside the panel instead.
+
 ## Development
 
 No npm install needed — libs are vendored (`vendor/LICENSES.md`), tests run on node built-ins.

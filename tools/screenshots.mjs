@@ -31,11 +31,14 @@ async function shot(name, url, size, { dark = false, ready = RENDERED, action = 
   console.log(`shot: shots/${name}.png`);
 }
 
+const TREE = `!!document.querySelector('.tree-row.file')`;
+
 try {
-  await shot('panel-light', 'panel.html?mock=1', PANEL);
-  await shot('panel-dark', 'panel.html?mock=1', PANEL, { dark: true });
+  await shot('panel-light', 'panel.html?mock=1&read=panel', PANEL);
+  await shot('panel-dark', 'panel.html?mock=1&read=panel', PANEL, { dark: true });
+  await shot('panel-tabmode', 'panel.html?mock=1', PANEL, { ready: TREE });
   await shot('panel-welcome', 'panel.html', PANEL, { ready: EDGE });
-  await shot('panel-guide', 'panel.html?mock=1', PANEL, {
+  await shot('panel-guide', 'panel.html?mock=1&read=panel', PANEL, {
     action: `document.querySelector('.tree-row.dir').click(),
              document.querySelector('.tree-row.file[data-path="docs/guide.md"]')?.click()`,
   });

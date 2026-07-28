@@ -3,10 +3,11 @@ import { createRealSource, createMockSource } from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
 
-const IS_MOCK = new URLSearchParams(location.search).get('mock') === '1';
+const PARAMS = new URLSearchParams(location.search);
+const IS_MOCK = PARAMS.get('mock') === '1';
 
 const els = Object.fromEntries(
-  ['folderBtn', 'mockBadge', 'backBtn', 'fwdBtn', 'tabBtn', 'refreshBtn', 'edge', 'tree', 'readerWrap', 'content', 'status'].map(
+  ['folderBtn', 'mockBadge', 'modeBtn', 'backBtn', 'fwdBtn', 'tabBtn', 'refreshBtn', 'edge', 'tree', 'readerWrap', 'content', 'status'].map(
     (id) => [id, document.getElementById(id)]
   )
 );
@@ -20,8 +21,64 @@ const renderer = createRenderer({
 
 let source = null;
 let tree = null;
+let activePath = null;
 const backStack = [];
 const fwdStack = [];
+
+/* ---------- read mode: files open in a full tab (default) or inline ---------- */
+
+const READ_MODE_KEY = 'mdreader.readmode';
+// ?read= overrides without persisting (used by the screenshot harness).
+let readMode = PARAMS.get('read') || localStorage.getItem(READ_MODE_KEY) || 'tab';
+let readerTabId = Number(sessionStorage.getItem('mdreader.readertab')) || null;
+
+const MODE_ICONS = {
+  tab: `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1.75 5.75h12.5" stroke="currentColor" stroke-width="1.5"/></svg>`,
+  panel: `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.25 2.75v10.5" stroke="currentColor" stroke-width="1.5"/></svg>`,
+};
+
+function applyReadMode() {
+  document.body.classList.toggle('mode-tab', readMode === 'tab');
+  els.modeBtn.innerHTML = MODE_ICONS[readMode] || MODE_ICONS.tab;
+  els.modeBtn.title =
+    readMode === 'tab'
+      ? 'Files open in a tab — click to read inside the panel'
+      : 'Files render inside the panel — click to open in a tab instead';
+}
+
+els.modeBtn.addEventListener('click', () => {
+  readMode = readMode === 'tab' ? 'panel' : 'tab';
+  localStorage.setItem(READ_MODE_KEY, readMode);
+  applyReadMode();
+  if (readMode === 'panel' && activePath) openFile(activePath);
+});
+
+function readerUrl(path, hash = '') {
+  const url = new URL('reader.html', location.href);
+  url.searchParams.set('path', path);
+  if (IS_MOCK) url.searchParams.set('mock', '1');
+  if (hash) url.hash = hash;
+  return url.toString();
+}
+
+async function openInReaderTab(path, hash = '') {
+  const url = readerUrl(path, hash);
+  if (typeof chrome === 'undefined' || !chrome.tabs) {
+    window.open(url, 'md-reader'); // http harness fallback (named window ≈ tab reuse)
+    return;
+  }
+  if (readerTabId != null) {
+    try {
+      await chrome.tabs.update(readerTabId, { url, active: true });
+      return;
+    } catch {
+      readerTabId = null; // tab was closed
+    }
+  }
+  const tab = await chrome.tabs.create({ url });
+  readerTabId = tab.id;
+  sessionStorage.setItem('mdreader.readertab', String(tab.id));
+}
 
 const viewer = createViewer({
   renderer,
@@ -69,7 +126,7 @@ function setFolderName(name) {
 function updateNavButtons() {
   els.backBtn.disabled = backStack.length === 0;
   els.fwdBtn.disabled = fwdStack.length === 0;
-  els.tabBtn.disabled = !viewer.current;
+  els.tabBtn.disabled = !activePath;
 }
 
 /* ---------- tree ---------- */
@@ -140,7 +197,7 @@ function renderDirChildren(node, depth) {
     row.dataset.path = file.path;
     row.innerHTML = `<span class="lead-spacer"></span><svg class="doc-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"/></svg><span class="name"></span>`;
     row.querySelector('.name').textContent = file.name;
-    if (viewer.current?.path === file.path) row.classList.add('active');
+    if (activePath === file.path) row.classList.add('active');
     row.addEventListener('click', () => navigate(file.path));
     li.appendChild(row);
     ul.appendChild(li);
@@ -170,12 +227,16 @@ function pathAncestors(path) {
 /* ---------- navigation ---------- */
 
 async function openFile(path, hash) {
+  activePath = path;
+  localStorage.setItem(lastFileKey(), path);
+  markActive(path);
+  if (readMode === 'tab') {
+    updateNavButtons();
+    await openInReaderTab(path, hash);
+    return;
+  }
   try {
-    const result = await viewer.open(path, { hash });
-    if (result.rendered) {
-      localStorage.setItem(lastFileKey(), path);
-    }
-    markActive(path);
+    await viewer.open(path, { hash });
     updateNavButtons();
   } catch (err) {
     els.content.innerHTML = '';
@@ -194,7 +255,7 @@ async function openFile(path, hash) {
 }
 
 function navigate(path, hash = '') {
-  if (viewer.current && viewer.current.path !== path) {
+  if (readMode === 'panel' && viewer.current && viewer.current.path !== path) {
     backStack.push(viewer.current.path);
     fwdStack.length = 0;
   }
@@ -214,20 +275,18 @@ els.fwdBtn.addEventListener('click', () => {
 });
 
 els.tabBtn.addEventListener('click', () => {
-  if (!viewer.current) return;
-  const url = new URL(chrome.runtime.getURL('reader.html'));
-  url.searchParams.set('path', viewer.current.path);
-  if (IS_MOCK) url.searchParams.set('mock', '1');
-  chrome.tabs.create({ url: url.toString() });
+  if (activePath) openInReaderTab(activePath);
 });
 
 els.refreshBtn.addEventListener('click', async () => {
   try {
     tree = await source.tree();
     renderTree();
-    if (viewer.current) {
-      if (treeHasPath(tree, viewer.current.path)) await viewer.refresh();
-      else await openDefaultFile();
+    if (activePath && !treeHasPath(tree, activePath)) {
+      activePath = null;
+      await openDefaultFile();
+    } else if (readMode === 'panel' && viewer.current) {
+      await viewer.refresh();
     }
   } catch (err) {
     onFolderGone(err);
@@ -293,10 +352,17 @@ async function loadFolder() {
 
 async function openDefaultFile() {
   const last = localStorage.getItem(lastFileKey());
-  if (last && treeHasPath(tree, last)) return openFile(last);
   const readme = tree.files.find((f) => /^readme\.(md|markdown)$/i.test(f.name));
-  const first = readme || tree.files[0] || firstFileIn(tree);
-  if (first) return openFile(first.path);
+  const pick = (last && treeHasPath(tree, last) && last) || (readme || tree.files[0] || firstFileIn(tree))?.path;
+  if (!pick) return;
+  if (readMode === 'tab') {
+    // Don't spawn a tab just because the panel opened — preselect only.
+    activePath = pick;
+    markActive(pick);
+    updateNavButtons();
+    return;
+  }
+  return openFile(pick);
 }
 
 function firstFileIn(node) {
@@ -311,6 +377,7 @@ function firstFileIn(node) {
 /* ---------- boot ---------- */
 
 async function boot() {
+  applyReadMode();
   if (IS_MOCK) {
     els.mockBadge.hidden = false;
     source = await createMockSource();

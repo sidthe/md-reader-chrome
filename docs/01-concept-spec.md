@@ -44,7 +44,10 @@ Wireframe proposal — not a real screenshot
 └───────────────────────────────┘
 ```
 
-Layout: tree and reader stacked in the side panel (panel is user-resizable); `⧉` opens the same rendered file in a full tab (`reader.html`) for wide reading — same renderer, no divergence.
+Layout — two read modes, toggled by a header button, persisted (changed 2026-07-28 on user feedback after first real use):
+- **Tab mode (default):** the panel is a tree-only navigator; clicking a file opens/reuses one reader tab (`reader.html?path=`) so the document fills the main window. The panel never spawns a tab on its own — only on click.
+- **Panel mode:** tree and reader stacked in the side panel as originally wireframed, with back/forward buttons.
+`⧉` explicitly opens the current file in the reader tab from either mode — same renderer everywhere, no divergence.
 
 Interactions: click file → render; relative `.md` links navigate within the reader (history back/forward); relative images resolved through the directory handle to blob URLs; external links open in a new tab. Refresh re-reads from disk; the freshness line always shows file mtime + when it was read.
 
