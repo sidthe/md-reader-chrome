@@ -1,0 +1,10 @@
+{
+  "name": "mock-repo",
+  "files": [
+    "README.md",
+    "CHANGELOG.md",
+    "docs/guide.md",
+    "docs/notes.md",
+    "img/logo.png"
+  ]
+}

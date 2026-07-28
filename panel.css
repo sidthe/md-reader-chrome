@@ -1,0 +1,277 @@
+:root {
+  --bg: #ffffff;
+  --bg-subtle: #f6f8fa;
+  --border: #d0d7de;
+  --fg: #1f2328;
+  --fg-muted: #59636e;
+  --accent: #0969da;
+  --mock-fg: #9a6700;
+  --mock-bg: #fff8c5;
+  --mock-border: rgba(212, 167, 44, 0.4);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --bg-subtle: #161b22;
+    --border: #30363d;
+    --fg: #e6edf3;
+    --fg-muted: #8b949e;
+    --accent: #4493f8;
+    --mock-fg: #d29922;
+    --mock-bg: rgba(187, 128, 9, 0.15);
+    --mock-border: rgba(187, 128, 9, 0.4);
+  }
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+/* ---- header ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.spacer { flex: 1; }
+
+.folder-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 55%;
+  border: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-btn:hover { background: var(--bg-subtle); }
+.folder-btn::after {
+  content: "";
+  flex: none;
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--fg-muted);
+}
+
+.icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: var(--fg-muted);
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn:hover:not(:disabled) { background: var(--bg-subtle); color: var(--fg); }
+.icon-btn:disabled { opacity: 0.3; cursor: default; }
+
+/* Pre-connection states: none of the nav buttons can act — hide, don't gray. */
+body[data-state="edge"] .topbar .icon-btn { display: none; }
+
+.folder-btn.wordmark { font-weight: 600; }
+.folder-btn.wordmark::after { display: none; }
+
+.mock-badge {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--mock-fg);
+  background: var(--mock-bg);
+  border: 1px solid var(--mock-border);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+/* ---- tree ---- */
+.tree {
+  flex: none;
+  max-height: 38vh;
+  overflow: auto;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tree ul { list-style: none; margin: 0; padding: 0; }
+.tree li { margin: 0; }
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  padding: 3px 8px 3px calc(8px + var(--depth, 0) * 14px);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-row:hover { background: var(--bg-subtle); }
+.tree-row .chevron,
+.tree-row .lead-spacer {
+  flex: none;
+  width: 12px;
+  display: inline-flex;
+  justify-content: center;
+}
+.tree-row .chevron::before {
+  content: "";
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--fg-muted);
+  transition: transform 120ms ease;
+}
+.tree-row.expanded .chevron::before { transform: rotate(90deg); }
+.tree-row .folder-icon { flex: none; color: #54aeff; }
+.tree-row .count {
+  color: var(--fg-muted);
+  font-size: 11px;
+  background: var(--bg-subtle);
+  border-radius: 2em;
+  padding: 0 6px;
+  margin-left: 6px;
+}
+.tree-row.expanded .count { display: none; }
+.tree-row.file .doc-icon {
+  flex: none;
+  color: var(--fg-muted);
+}
+.tree-row.file.active {
+  background: var(--bg-subtle);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.tree-row.file.active .doc-icon { color: var(--accent); }
+
+/* ---- reader ---- */
+.reader-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+.markdown-body {
+  font-size: 14px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.doc-enter { animation: doc-enter 180ms ease-out; }
+@keyframes doc-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-enter { animation: none; }
+  .tree-row .chevron { transition: none; }
+}
+
+/* ---- edge states ---- */
+.edge {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  color: var(--fg-muted);
+}
+.edge { max-width: 400px; margin: 0 auto; }
+.edge h2 { color: var(--fg); font-size: 15px; margin: 0; }
+.edge p { margin: 0; max-width: 34em; line-height: 1.5; }
+.edge .blank-icon { color: var(--fg-muted); opacity: 0.7; }
+
+/* Horizontal code scroll must look scrollable in a 360px panel. */
+.reader-wrap pre::-webkit-scrollbar { height: 8px; }
+.reader-wrap pre::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.reader-wrap pre::-webkit-scrollbar-track { background: transparent; }
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  color: #ffffff;
+  background: #1f883d;
+  border: 1px solid rgba(31, 35, 40, 0.15);
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.btn:hover { background: #1a7f37; }
+.btn.secondary {
+  color: var(--fg);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
+.edge-state {
+  color: var(--fg-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* ---- status bar ---- */
+.statusbar {
+  flex: none;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- read mode: tab = tree-only panel, docs open in a full tab ---- */
+body.mode-tab .reader-wrap,
+body.mode-tab .statusbar { display: none; }
+body.mode-tab .tree {
+  flex: 1;
+  max-height: none;
+  border-bottom: none;
+}
+body.mode-tab #backBtn,
+body.mode-tab #fwdBtn { display: none; }
+
+/* ---- state switching ---- */
+body[data-state="loading"] .tree,
+body[data-state="loading"] .reader-wrap,
+body[data-state="loading"] .statusbar { display: none; }
+body[data-state="edge"] .tree,
+body[data-state="edge"] .reader-wrap,
+body[data-state="edge"] .statusbar { display: none; }
+body[data-state="ready"] .edge { display: none; }
