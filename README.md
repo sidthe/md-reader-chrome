@@ -15,6 +15,8 @@ Not on the Web Store yet — load it unpacked:
 
 Clicking a file in the tree opens it in a full tab (one tab, reused). The layout toggle in the panel header switches to reading inside the panel instead. After a Chrome restart, one click on **Reconnect** restores folder access — choose "Allow on every visit" in Chrome's prompt to skip even that.
 
+**Managed/enterprise Chrome:** some organizations run a content-analysis policy that scans File System Access grants and can hang on whole-directory grants. If choosing a folder never completes, use **Choose files…** on the pick page instead — it selects individual Markdown files, which pass the per-file scan. You lose the folder tree and cross-document relative links, but the reader works.
+
 ## Features
 
 - GitHub-parity rendering: GFM tables, task lists, strikethrough, autolinks, fenced code with highlight.js, all five `> [!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/`[!CAUTION]` alerts, hover anchor links on headings

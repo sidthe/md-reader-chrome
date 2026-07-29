@@ -1,6 +1,12 @@
 import { idbGet, idbSet } from './lib/idb.js';
 import { makeDirectoryDropTarget } from './lib/drop.js';
-import { createRealSource, createMockSource } from './lib/source.js';
+import {
+  createRealSource,
+  createMockSource,
+  createFilesSource,
+  queryFilesPermission,
+  requestFilesPermission,
+} from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
 
@@ -111,16 +117,19 @@ async function pickFlow() {
   const start = () =>
     showEdge(
       `<svg class="blank-icon" viewBox="0 0 16 16" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2A1.75 1.75 0 0 0 5 1H1.75Z"/></svg>
-       <h2>Choose a folder for md-reader</h2>
-       <p>Its Markdown files will be listed in the side panel. Read directly from disk — nothing leaves this machine.</p>
-       <p><strong>Drag a folder anywhere onto this page</strong> — or use the picker:</p>`,
-      [{ label: 'Choose folder…', onClick: doPick }]
+       <h2>Choose what md-reader reads</h2>
+       <p>A <strong>folder</strong> gives a full browsable tree. Individual <strong>files</strong> are the fallback if a managed-security policy blocks folder access — each file is picked and scanned on its own.</p>
+       <p>Read directly from disk — nothing leaves this machine. You can also drag a folder onto this page.</p>`,
+      [
+        { label: 'Choose folder…', onClick: doPick },
+        { label: 'Choose files…', onClick: doPickFiles, secondary: true },
+      ]
     );
 
-  async function accept(handle) {
-    await idbSet('root', handle);
-    new BroadcastChannel('md-reader').postMessage({ type: 'folder-picked', name: handle.name });
-    showEdge(`<h2>Connected to “${handle.name}”</h2><p>The side panel is loading it. This tab will close.</p>`);
+  async function accept(stored, name) {
+    await idbSet('root', stored);
+    new BroadcastChannel('md-reader').postMessage({ type: 'folder-picked', name });
+    showEdge(`<h2>Connected to “${name}”</h2><p>The side panel is loading it. This tab will close.</p>`);
     setTimeout(async () => {
       try {
         const tab = await chrome.tabs.getCurrent();
@@ -139,25 +148,50 @@ async function pickFlow() {
       if (err?.name === 'AbortError') {
         showEdge(
           `<h2>No folder selected</h2>
-           <p>The picker closed without granting access. If you did select a folder, Chrome refused it — check for a permission bubble near the address bar. You can also drag the folder onto this page instead.</p>`,
-          [{ label: 'Try again', onClick: doPick }]
+           <p>The picker closed without granting access. If a managed-security scan hangs on folders, use <strong>Choose files</strong> instead.</p>`,
+          [{ label: 'Try again', onClick: doPick }, { label: 'Choose files…', onClick: doPickFiles, secondary: true }]
         );
       } else {
         showEdge(
-          `<h2>Folder picker failed</h2><p>${err?.name || 'Error'}: ${err?.message || err}</p><p>You can also drag the folder onto this page instead.</p>`,
-          [{ label: 'Try again', onClick: doPick }]
+          `<h2>Folder picker failed</h2><p>${err?.name || 'Error'}: ${err?.message || err}</p>`,
+          [{ label: 'Try again', onClick: doPick }, { label: 'Choose files…', onClick: doPickFiles, secondary: true }]
         );
       }
       return;
     }
-    await accept(handle);
+    await accept(handle, handle.name);
+  }
+
+  async function doPickFiles() {
+    let handles;
+    try {
+      handles = await window.showOpenFilePicker({
+        multiple: true,
+        types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'] } }],
+      });
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        showEdge(`<h2>No files selected</h2><p>The picker closed without a selection.</p>`, [
+          { label: 'Choose files…', onClick: doPickFiles },
+          { label: 'Choose folder…', onClick: doPick, secondary: true },
+        ]);
+      } else {
+        showEdge(`<h2>File picker failed</h2><p>${err?.name || 'Error'}: ${err?.message || err}</p>`, [
+          { label: 'Try again', onClick: doPickFiles },
+        ]);
+      }
+      return;
+    }
+    if (!handles.length) return;
+    await accept(handles, `${handles.length} file${handles.length === 1 ? '' : 's'}`);
   }
 
   makeDirectoryDropTarget(document.body, {
-    onDirectory: accept,
+    onDirectory: (handle) => accept(handle, handle.name),
     onError: (msg) =>
       showEdge(`<h2>That drop didn’t work</h2><p>${msg}</p>`, [
         { label: 'Choose folder…', onClick: doPick },
+        { label: 'Choose files…', onClick: doPickFiles, secondary: true },
       ]),
   });
 
@@ -175,25 +209,31 @@ async function boot() {
     return showEdge(NO_FILE_HTML);
   }
 
-  const handle = await idbGet('root');
-  if (!handle) {
-    showEdge('<h2>No folder connected</h2><p>Open the md-reader side panel and choose a folder first.</p>');
+  const stored = await idbGet('root');
+  if (!stored) {
+    showEdge('<h2>No folder connected</h2><p>Open the md-reader side panel and choose a folder or files first.</p>');
     return;
   }
-  const perm = await handle.queryPermission({ mode: 'read' });
-  if (perm !== 'granted') {
+
+  const openStored = (src) => {
+    source = src;
+    viewer.setSource(source);
+    if (path) openFile(path, location.hash.slice(1));
+    else showEdge(NO_FILE_HTML);
+  };
+
+  if (Array.isArray(stored)) {
+    if ((await queryFilesPermission(stored)) === 'granted') return openStored(createFilesSource(stored));
     showEdge(
-      `<h2>Reconnect “${handle.name}”</h2>
-       <p>Chrome needs a click to re-allow access.</p>`,
+      `<h2>Reconnect your files</h2><p>Chrome needs a click to re-allow access to the ${stored.length} selected files.</p>`,
       [
         {
-          label: `Reconnect ${handle.name}`,
+          label: `Reconnect ${stored.length} files`,
           onClick: async () => {
-            const p = await handle.requestPermission({ mode: 'read' });
-            if (p === 'granted') {
-              source = createRealSource(handle);
-              viewer.setSource(source);
-              if (path) openFile(path, location.hash.slice(1));
+            const granted = await requestFilesPermission(stored);
+            if (granted.length) {
+              await idbSet('root', granted);
+              openStored(createFilesSource(granted));
             }
           },
         },
@@ -201,10 +241,25 @@ async function boot() {
     );
     return;
   }
-  source = createRealSource(handle);
-  viewer.setSource(source);
-  if (path) return openFile(path, location.hash.slice(1));
-  showEdge(NO_FILE_HTML);
+
+  const handle = stored;
+  if ((await handle.queryPermission({ mode: 'read' })) !== 'granted') {
+    showEdge(
+      `<h2>Reconnect “${handle.name}”</h2>
+       <p>Chrome needs a click to re-allow access.</p>`,
+      [
+        {
+          label: `Reconnect ${handle.name}`,
+          onClick: async () => {
+            if ((await handle.requestPermission({ mode: 'read' })) === 'granted')
+              openStored(createRealSource(handle));
+          },
+        },
+      ]
+    );
+    return;
+  }
+  openStored(createRealSource(handle));
 }
 
 boot();

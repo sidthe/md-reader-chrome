@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "md-reader",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Browse a local folder's Markdown files in the side panel, rendered GitHub-style. Local-only: no file content leaves the machine.",
   "permissions": ["sidePanel"],
   "side_panel": { "default_path": "panel.html" },
