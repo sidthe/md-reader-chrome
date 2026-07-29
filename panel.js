@@ -1,5 +1,12 @@
-import { idbGet } from './lib/idb.js';
-import { createRealSource, createMockSource } from './lib/source.js';
+import { idbGet, idbSet } from './lib/idb.js';
+import { makeDirectoryDropTarget } from './lib/drop.js';
+import {
+  createRealSource,
+  createMockSource,
+  createFilesSource,
+  queryFilesPermission,
+  requestFilesPermission,
+} from './lib/source.js';
 import { createRenderer } from './lib/render.js';
 import { createViewer } from './lib/viewer.js';
 
@@ -120,7 +127,7 @@ function setFolderName(name) {
   els.folderBtn.hidden = false;
   els.folderBtn.classList.remove('wordmark');
   els.folderBtn.textContent = name;
-  els.folderBtn.title = `${name} — click to switch folder`;
+  els.folderBtn.title = `${name} — click to switch folder, or drop a folder anywhere on this panel`;
 }
 
 function updateNavButtons() {
@@ -245,7 +252,7 @@ async function openFile(path, hash) {
     const p = document.createElement('p');
     p.textContent =
       err?.name === 'NotFoundError'
-        ? `${path} is no longer in the folder. It may have been moved or deleted — refresh to update the file list.`
+        ? `${path} could not be read — it may have been moved or deleted, or (in files mode) it wasn’t among the opened files.`
         : `Could not read ${path}: ${err?.message || err}`;
     box.appendChild(p);
     els.content.appendChild(box);
@@ -314,6 +321,25 @@ function pickFolder() {
   else window.open(url.toString(), 'md-reader'); // http harness fallback
 }
 
+// Dropping a folder from Finder/Explorer anywhere on the panel connects it —
+// no picker dialog (and no enterprise scan hook) involved at all.
+makeDirectoryDropTarget(document.body, {
+  onDirectory: async (handle) => {
+    if (IS_MOCK) return;
+    await idbSet('root', handle);
+    backStack.length = 0;
+    fwdStack.length = 0;
+    activePath = null;
+    await connect(handle);
+  },
+  onError: (msg) => {
+    if (IS_MOCK) return;
+    showEdge(`<h2>That drop didn’t work</h2><p>${msg}</p>`, [
+      { label: 'Choose folder…', onClick: pickFolder },
+    ]);
+  },
+});
+
 new BroadcastChannel('md-reader').addEventListener('message', (e) => {
   if (e.data?.type !== 'folder-picked') return;
   backStack.length = 0;
@@ -335,6 +361,14 @@ async function connect(handle) {
   source = createRealSource(handle);
   viewer.setSource(source);
   setFolderName(handle.name);
+  await loadFolder();
+}
+
+async function connectFiles(handles) {
+  source = createFilesSource(handles);
+  viewer.setSource(source);
+  setFolderName(source.name);
+  els.folderBtn.title = `${source.name} — click to choose a folder or files`;
   await loadFolder();
 }
 
@@ -416,8 +450,8 @@ async function boot() {
     return;
   }
 
-  const handle = await idbGet('root');
-  if (!handle) {
+  const stored = await idbGet('root');
+  if (!stored) {
     els.folderBtn.hidden = false;
     els.folderBtn.textContent = 'md-reader';
     els.folderBtn.classList.add('wordmark');
@@ -425,12 +459,41 @@ async function boot() {
     showEdge(
       `<svg class="blank-icon" viewBox="0 0 208 128" width="48" height="30" aria-hidden="true"><rect x="4" y="4" width="200" height="120" rx="12" fill="none" stroke="currentColor" stroke-width="10"/><path fill="currentColor" d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39Z"/><path fill="currentColor" d="m155 98-27-30h18V30h18v38h18Z"/></svg>
        <h2>md-reader</h2>
-       <p>Browse a local folder’s Markdown files, rendered GitHub-style. Files are read directly from disk — nothing leaves this machine.</p>`,
-      [{ label: 'Choose folder…', onClick: pickFolder }]
+       <p>Browse a local folder’s Markdown files, rendered GitHub-style. Files are read directly from disk — nothing leaves this machine.</p>
+       <p><strong>Drop a folder onto this panel</strong>, or pick a folder or individual files:</p>`,
+      [{ label: 'Choose folder or files…', onClick: pickFolder }]
     );
     return;
   }
 
+  // Files mode: stored value is an array of file handles (see the pick page).
+  if (Array.isArray(stored)) {
+    if ((await queryFilesPermission(stored)) === 'granted') {
+      await connectFiles(stored);
+      return;
+    }
+    setFolderName(`${stored.length} files`);
+    showEdge(
+      `<h2>Reconnect your files</h2>
+       <p>Chrome needs a click to re-allow access to the ${stored.length} selected files.</p>`,
+      [
+        {
+          label: `Reconnect ${stored.length} files`,
+          onClick: async () => {
+            const granted = await requestFilesPermission(stored);
+            if (granted.length) {
+              await idbSet('root', granted);
+              await connectFiles(granted);
+            }
+          },
+        },
+        { label: 'Choose folder or files…', onClick: pickFolder, secondary: true },
+      ]
+    );
+    return;
+  }
+
+  const handle = stored;
   const perm = await handle.queryPermission({ mode: 'read' });
   if (perm === 'granted') {
     await connect(handle);

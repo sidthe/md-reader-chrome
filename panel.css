@@ -256,6 +256,8 @@ body[data-state="edge"] .topbar .icon-btn { display: none; }
   text-overflow: ellipsis;
 }
 
+.drop-hover { outline: 3px dashed var(--accent); outline-offset: -3px; }
+
 .icon-btn.spinning svg { animation: btn-spin 900ms linear infinite; }
 @keyframes btn-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
